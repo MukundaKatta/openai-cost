@@ -73,6 +73,47 @@ fn cache_hit_helper() {
 }
 
 #[test]
+fn chat_completions_constructor_saturates_when_cached_exceeds_prompt() {
+    // Defensive: if a malformed response reports more cached tokens than
+    // prompt tokens, input_tokens must not underflow.
+    let u = Usage::from_chat_completions(100, 50, 300);
+    assert_eq!(u.input_tokens, 0);
+    assert_eq!(u.output_tokens, 50);
+    assert_eq!(u.cached_input_tokens, 300);
+}
+
+#[test]
+fn all_default_models_are_priced() {
+    for model in [
+        "gpt-5",
+        "gpt-5-mini",
+        "gpt-5-nano",
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+        "gpt-4o",
+        "gpt-4o-mini",
+        "o3",
+        "o3-mini",
+        "o4-mini",
+    ] {
+        let p = default_pricing(model).unwrap_or_else(|| panic!("missing pricing for {model}"));
+        assert!(p.input_per_mtok > 0.0, "{model} input rate not positive");
+        assert!(p.output_per_mtok > 0.0, "{model} output rate not positive");
+        assert!(
+            p.cached_input_per_mtok <= p.input_per_mtok,
+            "{model} cached rate should not exceed fresh input rate"
+        );
+    }
+}
+
+#[test]
+fn empty_usage_costs_nothing() {
+    let pricing = default_pricing("gpt-4o").unwrap();
+    assert_eq!(pricing.cost_for(&Usage::default()), 0.0);
+}
+
+#[test]
 fn byo_pricing_works() {
     let custom = Pricing {
         input_per_mtok: 1.0,
@@ -87,4 +128,27 @@ fn byo_pricing_works() {
     };
     let cost = custom.cost_for(&usage);
     assert!((cost - 3.1).abs() < 1e-6, "got {cost}");
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn usage_deserializes_from_json() {
+    // With `serde(default)`, missing fields default to zero.
+    let u: Usage = serde_json::from_str(r#"{"input_tokens": 700, "output_tokens": 500}"#).unwrap();
+    assert_eq!(u.input_tokens, 700);
+    assert_eq!(u.output_tokens, 500);
+    assert_eq!(u.cached_input_tokens, 0);
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn usage_serde_round_trips() {
+    let u = Usage {
+        input_tokens: 1,
+        output_tokens: 2,
+        cached_input_tokens: 3,
+    };
+    let json = serde_json::to_string(&u).unwrap();
+    let back: Usage = serde_json::from_str(&json).unwrap();
+    assert_eq!(u, back);
 }

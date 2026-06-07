@@ -8,8 +8,9 @@ use serde::{Deserialize, Serialize};
 ///
 /// Chat Completions exposes the cached count under
 /// `prompt_tokens_details.cached_tokens`; the Responses API uses
-/// `cached_input_tokens` directly. The `From` impls in this crate flatten
-/// both shapes onto these fields.
+/// `cached_input_tokens` directly. The [`Usage::from_chat_completions`] and
+/// [`Usage::from_responses_api`] constructors flatten both shapes onto these
+/// fields.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
